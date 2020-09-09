@@ -24,7 +24,7 @@ class ReleaseDateUpdateCronJob implements SubscriberInterface
     public static function getSubscribedEvents()
     {
         return [
-            'Shopware_CronJob_MxcDropshipReleaseDateUpdate' => 'onReleaseDateUpdate',
+            'Shopware_CronJob_MxcVapeeReleaseDateUpdate' => 'onReleaseDateUpdate',
         ];
     }
 
