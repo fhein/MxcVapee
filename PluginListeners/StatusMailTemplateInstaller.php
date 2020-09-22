@@ -35,6 +35,7 @@ class StatusMailTemplateInstaller implements AugmentedObject
 
         // install our status mail templates
         $this->mailManager->setMailTemplates($this->classConfig);
+
     }
 
     public function uninstall(UninstallContext $context)

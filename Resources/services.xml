@@ -9,10 +9,14 @@
              public="false">
             <argument type="service" id="mxcbc_vapee.list_product_service.inner"/>
         </service>
-        <service id="mxcbc_vapee.subscriber.templates"
+        <service id="mxcbc_vapee.subscribers.templates"
                  class="MxcVapee\Subscribers\TemplateRegistration">
             <argument>%mxc_vapee.plugin_dir%</argument>
             <argument type="service" id="template"/>
+            <tag name="shopware.event_subscriber"/>
+        </service>
+        <service id="mxcbc_vapee.subscribers.enable_xdebug_cookies"
+                 class="MxcVapee\Subscribers\EnableXdebugCookies">
             <tag name="shopware.event_subscriber"/>
         </service>
         <service id="mxcbc_vapee.cronjob.releasedate_update"
