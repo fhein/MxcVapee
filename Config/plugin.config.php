@@ -3,6 +3,7 @@
 namespace MxcVapee\Config;
 
 use MxcVapee\PluginListeners\StatusMailTemplateInstaller;
+use MxcVapee\Workflow\WorkflowEngine;
 use Shopware\Bundle\AttributeBundle\Service\TypeMapping;
 
 return [
@@ -18,4 +19,10 @@ return [
             ],
         ],
     ],
+    'services' => [
+        'magicals' => [
+            WorkflowEngine::class,
+        ],
+    ],
+
 ];

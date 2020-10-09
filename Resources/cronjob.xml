@@ -9,5 +9,12 @@
         <interval>86400</interval>
         <disableOnError>false</disableOnError>
     </cronjob>
+    <cronjob>
+        <name>vapee.de - Order Workflow</name>
+        <action>Shopware_CronJob_MxcVapeeOrderWorkflow</action>
+        <active>true</active>
+        <interval>300</interval>
+        <disableOnError>false</disableOnError>
+    </cronjob>
 
 </cronjobs>

@@ -23,5 +23,9 @@
                  class="MxcVapee\Cronjobs\ReleaseDateUpdateCronJob">
             <tag name="shopware.event_subscriber"/>
         </service>
+        <service id="mxcbc_vapee.cronjob.order_workflow"
+                 class="MxcVapee\Cronjobs\OrderWorkflowCronJob">
+            <tag name="shopware.event_subscriber"/>
+        </service>
     </services>
 </container>
