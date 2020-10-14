@@ -41,6 +41,8 @@ class WorkflowEngine implements AugmentedObject
 
     public function processOpenOrders()
     {
+        // @todo: Use event manager to attach foreign modules like MxcDropship
+
         $openOrders = $this->getOrdersByStatus(Status::ORDER_STATE_OPEN);
 
         foreach ($openOrders as $order) {
@@ -60,6 +62,8 @@ class WorkflowEngine implements AugmentedObject
 
     public function processInProgressOrders()
     {
+        // @todo: Use event manager to attach foreign modules like MxcDropship
+
         $inProgressOrders = $this->getOrdersByStatus(Status::ORDER_STATE_IN_PROCESS);
 
         foreach ($inProgressOrders as $order) {
