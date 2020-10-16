@@ -2,34 +2,34 @@
 
 namespace MxcVapee\Workflow;
 
+use MxcCommons\Plugin\Service\ClassConfigAwareTrait;
 use MxcCommons\Plugin\Service\DatabaseAwareTrait;
-use MxcCommons\Plugin\Service\ModelManagerAwareTrait;
 use MxcCommons\ServiceManager\AugmentedObject;
 use MxcCommons\Toolbox\Shopware\DocumentRenderer;
 use MxcCommons\Toolbox\Shopware\MailTool;
 use MxcDropship\Dropship\DropshipManager;
 use MxcDropship\Jobs\SendOrders;
-use Shopware\Models\Order\Order;
 use Shopware\Models\Order\Status;
+use DateTime;
 
 class WorkflowEngine implements AugmentedObject
 {
-    use ModelManagerAwareTrait;
+    use ClassConfigAwareTrait;
     use DatabaseAwareTrait;
 
     /** @var MailTool */
     protected $mailer;
 
     /** @var SendOrders|null */
-    protected $sendOrders;
+    protected $sendOrderJob;
 
     /** @var DropshipManager|null */
     protected $dropshipManager;
 
-    public function __construct(MailTool $mailer, ?SendOrders $sendOrders, ?DropshipManager $dropshipManager)
+    public function __construct(MailTool $mailer, ?SendOrders $sendOrderJob, ?DropshipManager $dropshipManager)
     {
         $this->mailer = $mailer;
-        $this->sendOrders = $sendOrders;
+        $this->sendOrderJob = $sendOrderJob;
         $this->dropshipManager = $dropshipManager;
     }
 
@@ -41,44 +41,65 @@ class WorkflowEngine implements AugmentedObject
 
     public function processOpenOrders()
     {
-        // @todo: Use event manager to attach foreign modules like MxcDropship
-
         $openOrders = $this->getOrdersByStatus(Status::ORDER_STATE_OPEN);
+        if (empty($openOrders)) return;
 
         foreach ($openOrders as $order) {
-            // open orders which are completely paid by the customer are put
-            if ($order['cleared'] == Status::PAYMENT_STATE_COMPLETELY_PAID)
-            {
-                // set new orderstatus
-                $statusId = Status::ORDER_STATE_IN_PROCESS;
-                $orderId = $order['orderID'];
-                $this->setOrderStatus($orderId, $statusId);
-                $this->sendStatusMail($orderId, $statusId);
-            }
+            // open orders which are completely paid by the customer are promoted to ORDER_STATE_IN_PROCESS
+            $this->promotePaidOrder($order);
+            $this->remindPrepayments($order);
         }
-        if ($this->sendOrders === null) return;
-        $this->sendOrders->run();
+        if ($this->sendOrderJob === null) return;
+        $this->sendOrderJob->run($openOrders);
+    }
+
+    // open orders which are completely paid by the customer are promoted to ORDER_STATE_IN_PROCESS
+    protected function promotePaidOrder(array $order)
+    {
+        if ($order['cleared'] == Status::PAYMENT_STATE_COMPLETELY_PAID)
+        {
+            $statusId = Status::ORDER_STATE_IN_PROCESS;
+            $orderId = $order['orderID'];
+            $this->setOrderStatus($orderId, $statusId);
+            $this->sendStatusMail($orderId, $statusId);
+        }
+    }
+
+    // open orders with prepayment will trigger a payment reminder mail to the customer
+    // and a notification mail to the shop owner if the order is older than 3 days
+    // payment status gets set to PAYMENT_STATE_1ST_REMINDER accordingly
+    public function remindPrepayments(array $order)
+    {
+        if ($order['cleared'] != Status::PAYMENT_STATE_OPEN) return;
+        if (! $this->isPrepaymentOrder($order)) return;
+        $date = new DateTime($order['orderdate']);
+        $now = new DateTime();
+        $diff = $date->diff($now);
+        // if order date is more than 3 days in the past
+        if ($diff->days > 3 && $diff->invert == 0) {
+            $statusId = Status::PAYMENT_STATE_1ST_REMINDER;
+            $orderId = $order['orderID'];
+            $this->setPaymentStatus($orderId, $statusId);
+            $this->sendStatusMail($orderId, $statusId);
+            $context = $this->getNotificationContext('PREPAYED_ORDER', 'reminder', $order);
+            $this->sendNotificationMail($context);
+        }
     }
 
     public function processInProgressOrders()
     {
-        // @todo: Use event manager to attach foreign modules like MxcDropship
-
         $inProgressOrders = $this->getOrdersByStatus(Status::ORDER_STATE_IN_PROCESS);
+        if (empty($inProgressOrders)) return;
 
         foreach ($inProgressOrders as $order) {
             $orderId = $order['orderID'];
+            $trackingDataComplete = ! empty($order['trackingcode']);
             if ($this->dropshipManager !== null) {
-                // if order send failed with an unrecoverable error or order gets cancelled by InnoCigs
-                $status = $this->dropshipManager->getDropshipStatus($order);
-                $isError = $status > DropshipManager::DROPSHIP_STATUS_ERROR;
-                if ($isError || $status == DropshipManager::DROPSHIP_STATUS_CANCELLED) {
+                if ($this->dropshipManager->isClarificationRequired($order)) {
                     $this->setOrderStatus($orderId, Status::ORDER_STATE_CLARIFICATION_REQUIRED);
                     continue;
                 }
                 $trackingDataComplete = $this->dropshipManager->isTrackingDataComplete($order);
-            } else {
-                $trackingDataComplete = ! empty($order['trackingcode']);
             }
             if (! $trackingDataComplete) continue;
             $this->sendStatusMail($orderId, Status::ORDER_STATE_COMPLETELY_DELIVERED);
@@ -102,8 +123,49 @@ class WorkflowEngine implements AugmentedObject
     {
         $this->db->executeUpdate(
             'UPDATE s_order o SET o.status = :status WHERE o.id = :id',
-           ['status'  => $statusId, 'id'      => $orderId]
+            ['status' => $statusId, 'id' => $orderId]
         );
+    }
+
+    protected function setPaymentStatus(int $orderId, int $statusId)
+    {
+        $this->db->executeUpdate(
+            'UPDATE s_order o SET o.cleared = :status WHERE o.id = :id',
+            ['status' => $statusId, 'id' => $orderId]
+        );
+    }
+
+    public function getNotificationContext(string $group, string $topic, array $order = null)
+    {
+        $context = @$this->classConfig['notification_context'][$group][$topic];
+        if ($context === null) {
+            return null;
+        }
+
+        $replacements = [
+            '{$orderNumber}' => @$order['ordernumber'] ?? '',
+        ];
+
+        foreach ($context as $group => $value) {
+            if (! is_string($value)) {
+                continue;
+            }
+            $context[$group] = str_replace(array_keys($replacements), array_values($replacements), $context[$group]);
+        }
+        return $context;
+    }
+
+    protected function sendNotificationMail(array $context)
+    {
+        $dsMail = Shopware()->TemplateMail()->createMail($context['mailTemplate'], $context);
+        $dsMail->addTo('support@vapee.de');
+        $dsMail->clearFrom();
+        $dsMail->setFrom('info@vapee.de', 'vapee.de Bestellwesen');
+        if (isset($context['mailSubject'])) {
+            $dsMail->clearSubject();
+            $dsMail->setSubject($context['mailSubject']);
+        }
+        $dsMail->send();
     }
 
     public function sendStatusMail(int $orderId, int $statusId, array $documentAttachments = [])
@@ -113,5 +175,13 @@ class WorkflowEngine implements AugmentedObject
             $this->mailer->attachOrderDocument($mail, $orderId, $typeId);
         }
         $this->mailer->sendStatusMail($mail);
+    }
+
+    protected function isPrepaymentOrder(array $order)
+    {
+        $payment = $this->db->fetchRow('SELECT * FROM s_core_paymentmeans p WHERE p.id = :paymentId',
+            ['paymentId' => $order['paymentID']]
+        );
+        return $payment['name'] == 'prepayment';
     }
 }
