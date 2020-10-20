@@ -61,7 +61,7 @@ class WorkflowEngine implements AugmentedObject
             $statusId = Status::ORDER_STATE_IN_PROCESS;
             $orderId = $order['orderID'];
             $this->setOrderStatus($orderId, $statusId);
-            $this->sendStatusMail($orderId, $statusId);
+            $this->mailer->sendStatusMail($orderId, $statusId);
         }
     }
 
@@ -72,7 +72,7 @@ class WorkflowEngine implements AugmentedObject
     {
         if ($order['cleared'] != Status::PAYMENT_STATE_OPEN) return;
         if (! $this->isPrepaymentOrder($order)) return;
-        $date = new DateTime($order['orderdate']);
+        $date = new DateTime($order['ordertime']);
         $now = new DateTime();
         $diff = $date->diff($now);
         // if order date is more than 3 days in the past
@@ -80,9 +80,13 @@ class WorkflowEngine implements AugmentedObject
             $statusId = Status::PAYMENT_STATE_1ST_REMINDER;
             $orderId = $order['orderID'];
             $this->setPaymentStatus($orderId, $statusId);
-            $this->sendStatusMail($orderId, $statusId);
+            $this->mailer->sendStatusMail($orderId, $statusId);
             $context = $this->getNotificationContext('PREPAYED_ORDER', 'reminder', $order);
-            $this->sendNotificationMail($context);
+            $this->mailer->sendNotificationMail(
+                $orderId,
+                $context,
+                $this->classConfig['notification_address']
+            );
         }
     }
 
@@ -102,10 +106,16 @@ class WorkflowEngine implements AugmentedObject
                 $trackingDataComplete = $this->dropshipManager->isTrackingDataComplete($order);
             }
             if (! $trackingDataComplete) continue;
-            $this->sendStatusMail($orderId, Status::ORDER_STATE_COMPLETELY_DELIVERED);
+            $this->mailer->sendStatusMail($orderId, Status::ORDER_STATE_COMPLETELY_DELIVERED);
             $statusId = Status::ORDER_STATE_COMPLETED;
             $this->setOrderStatus($orderId, $statusId);
-            $this->sendStatusMail($orderId, $statusId, [DocumentRenderer::DOC_TYPE_INVOICE]);
+            $this->mailer->sendStatusMail($orderId, $statusId, [DocumentRenderer::DOC_TYPE_INVOICE]);
+            $context = $this->getNotificationContext('ORDER', 'closed', $order);
+            $this->mailer->sendNotificationMail(
+                $orderId,
+                $context,
+                $this->classConfig['notification_address'],
+                [DocumentRenderer::DOC_TYPE_INVOICE]);
         }
     }
 
@@ -153,28 +163,6 @@ class WorkflowEngine implements AugmentedObject
             $context[$group] = str_replace(array_keys($replacements), array_values($replacements), $context[$group]);
         }
         return $context;
-    }
-
-    protected function sendNotificationMail(array $context)
-    {
-        $dsMail = Shopware()->TemplateMail()->createMail($context['mailTemplate'], $context);
-        $dsMail->addTo('support@vapee.de');
-        $dsMail->clearFrom();
-        $dsMail->setFrom('info@vapee.de', 'vapee.de Bestellwesen');
-        if (isset($context['mailSubject'])) {
-            $dsMail->clearSubject();
-            $dsMail->setSubject($context['mailSubject']);
-        }
-        $dsMail->send();
-    }
-
-    public function sendStatusMail(int $orderId, int $statusId, array $documentAttachments = [])
-    {
-        $mail = $this->mailer->renderStatusMail($orderId, $statusId);
-        foreach ($documentAttachments as $typeId) {
-            $this->mailer->attachOrderDocument($mail, $orderId, $typeId);
-        }
-        $this->mailer->sendStatusMail($mail);
     }
 
     protected function isPrepaymentOrder(array $order)
