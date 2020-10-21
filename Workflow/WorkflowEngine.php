@@ -7,6 +7,7 @@ use MxcCommons\Plugin\Service\DatabaseAwareTrait;
 use MxcCommons\ServiceManager\AugmentedObject;
 use MxcCommons\Toolbox\Shopware\DocumentRenderer;
 use MxcCommons\Toolbox\Shopware\MailTool;
+use MxcCommons\Toolbox\Shopware\OrderTool;
 use MxcDropship\Dropship\DropshipManager;
 use MxcDropship\Jobs\SendOrders;
 use Shopware\Models\Order\Status;
@@ -26,11 +27,15 @@ class WorkflowEngine implements AugmentedObject
     /** @var DropshipManager|null */
     protected $dropshipManager;
 
-    public function __construct(MailTool $mailer, ?SendOrders $sendOrderJob, ?DropshipManager $dropshipManager)
+    /** @var OrderTool */
+    protected $orderTool;
+
+    public function __construct(MailTool $mailer, OrderTool $orderTool, ?SendOrders $sendOrderJob, ?DropshipManager $dropshipManager)
     {
         $this->mailer = $mailer;
         $this->sendOrderJob = $sendOrderJob;
         $this->dropshipManager = $dropshipManager;
+        $this->orderTool = $orderTool;
     }
 
     public function run()
@@ -41,16 +46,18 @@ class WorkflowEngine implements AugmentedObject
 
     public function processOpenOrders()
     {
-        $openOrders = $this->getOrdersByStatus(Status::ORDER_STATE_OPEN);
+        $openOrders = $this->orderTool->getOrdersByStatus(Status::ORDER_STATE_OPEN);
         if (empty($openOrders)) return;
 
         foreach ($openOrders as $order) {
             // open orders which are completely paid by the customer are promoted to ORDER_STATE_IN_PROCESS
             $this->promotePaidOrder($order);
             $this->remindPrepayments($order);
+            if ($this->dropshipManager === null) continue;
+            $this->dropshipManager->initOrder($order['orderID']);
         }
         if ($this->sendOrderJob === null) return;
-        $this->sendOrderJob->run($openOrders);
+        $this->sendOrderJob->run();
     }
 
     // open orders which are completely paid by the customer are promoted to ORDER_STATE_IN_PROCESS
@@ -60,7 +67,7 @@ class WorkflowEngine implements AugmentedObject
         {
             $statusId = Status::ORDER_STATE_IN_PROCESS;
             $orderId = $order['orderID'];
-            $this->setOrderStatus($orderId, $statusId);
+            $this->orderTool->setOrderStatus($orderId, $statusId);
             $this->mailer->sendStatusMail($orderId, $statusId);
         }
     }
@@ -71,7 +78,7 @@ class WorkflowEngine implements AugmentedObject
     public function remindPrepayments(array $order)
     {
         if ($order['cleared'] != Status::PAYMENT_STATE_OPEN) return;
-        if (! $this->isPrepaymentOrder($order)) return;
+        if (! $this->orderTool->isPrepayment($order['paymentID'])) return;
         $date = new DateTime($order['ordertime']);
         $now = new DateTime();
         $diff = $date->diff($now);
@@ -79,7 +86,7 @@ class WorkflowEngine implements AugmentedObject
         if ($diff->days > 3 && $diff->invert == 0) {
             $statusId = Status::PAYMENT_STATE_1ST_REMINDER;
             $orderId = $order['orderID'];
-            $this->setPaymentStatus($orderId, $statusId);
+            $this->orderTool->setPaymentStatus($orderId, $statusId);
             $this->mailer->sendStatusMail($orderId, $statusId);
             $context = $this->getNotificationContext('PREPAYED_ORDER', 'reminder', $order);
             $this->mailer->sendNotificationMail(
@@ -92,7 +99,7 @@ class WorkflowEngine implements AugmentedObject
 
     public function processInProgressOrders()
     {
-        $inProgressOrders = $this->getOrdersByStatus(Status::ORDER_STATE_IN_PROCESS);
+        $inProgressOrders = $this->orderTool->getOrdersByStatus(Status::ORDER_STATE_IN_PROCESS);
         if (empty($inProgressOrders)) return;
 
         foreach ($inProgressOrders as $order) {
@@ -100,7 +107,7 @@ class WorkflowEngine implements AugmentedObject
             $trackingDataComplete = ! empty($order['trackingcode']);
             if ($this->dropshipManager !== null) {
                 if ($this->dropshipManager->isClarificationRequired($order)) {
-                    $this->setOrderStatus($orderId, Status::ORDER_STATE_CLARIFICATION_REQUIRED);
+                    $this->orderTool->setOrderStatus($orderId, Status::ORDER_STATE_CLARIFICATION_REQUIRED);
                     continue;
                 }
                 $trackingDataComplete = $this->dropshipManager->isTrackingDataComplete($order);
@@ -108,7 +115,7 @@ class WorkflowEngine implements AugmentedObject
             if (! $trackingDataComplete) continue;
             $this->mailer->sendStatusMail($orderId, Status::ORDER_STATE_COMPLETELY_DELIVERED);
             $statusId = Status::ORDER_STATE_COMPLETED;
-            $this->setOrderStatus($orderId, $statusId);
+            $this->orderTool->setOrderStatus($orderId, $statusId);
             $this->mailer->sendStatusMail($orderId, $statusId, [DocumentRenderer::DOC_TYPE_INVOICE]);
             $context = $this->getNotificationContext('ORDER', 'closed', $order);
             $this->mailer->sendNotificationMail(
@@ -117,32 +124,6 @@ class WorkflowEngine implements AugmentedObject
                 $this->classConfig['notification_address'],
                 [DocumentRenderer::DOC_TYPE_INVOICE]);
         }
-    }
-
-    protected function getOrdersByStatus(int $statusId)
-    {
-        return $this->db->fetchAll('
-            SELECT * FROM s_order o LEFT JOIN s_order_attributes oa ON oa.orderID = o.id 
-            WHERE o.status = :orderStatus 
-        ', [
-            'orderStatus' => $statusId,
-        ]);
-    }
-
-    protected function setOrderStatus(int $orderId, int $statusId)
-    {
-        $this->db->executeUpdate(
-            'UPDATE s_order o SET o.status = :status WHERE o.id = :id',
-            ['status' => $statusId, 'id' => $orderId]
-        );
-    }
-
-    protected function setPaymentStatus(int $orderId, int $statusId)
-    {
-        $this->db->executeUpdate(
-            'UPDATE s_order o SET o.cleared = :status WHERE o.id = :id',
-            ['status' => $statusId, 'id' => $orderId]
-        );
     }
 
     public function getNotificationContext(string $group, string $topic, array $order = null)
@@ -163,13 +144,5 @@ class WorkflowEngine implements AugmentedObject
             $context[$group] = str_replace(array_keys($replacements), array_values($replacements), $context[$group]);
         }
         return $context;
-    }
-
-    protected function isPrepaymentOrder(array $order)
-    {
-        $payment = $this->db->fetchRow('SELECT * FROM s_core_paymentmeans p WHERE p.id = :paymentId',
-            ['paymentId' => $order['paymentID']]
-        );
-        return $payment['name'] == 'prepayment';
     }
 }
