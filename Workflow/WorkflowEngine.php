@@ -53,11 +53,7 @@ class WorkflowEngine implements AugmentedObject
             // open orders which are completely paid by the customer are promoted to ORDER_STATE_IN_PROCESS
             $this->promotePaidOrder($order);
             $this->remindPrepayments($order);
-            if ($this->dropshipManager === null) continue;
-            $this->dropshipManager->initOrder($order['orderID']);
         }
-        if ($this->sendOrderJob === null) return;
-        $this->sendOrderJob->run();
     }
 
     // open orders which are completely paid by the customer are promoted to ORDER_STATE_IN_PROCESS
@@ -99,6 +95,10 @@ class WorkflowEngine implements AugmentedObject
 
     public function processInProgressOrders()
     {
+        if ($this->sendOrderJob !== null) {
+            $this->sendOrderJob->run();
+        }
+
         $inProgressOrders = $this->orderTool->getOrdersByStatus(Status::ORDER_STATE_IN_PROCESS);
         if (empty($inProgressOrders)) return;
 
@@ -111,6 +111,9 @@ class WorkflowEngine implements AugmentedObject
                     continue;
                 }
                 $trackingDataComplete = $this->dropshipManager->isTrackingDataComplete($order);
+                if ($trackingDataComplete) {
+                    $this->dropshipManager->deleteDropshipLog($orderId);
+                }
             }
             if (! $trackingDataComplete) continue;
             $this->mailer->sendStatusMail($orderId, Status::ORDER_STATE_COMPLETELY_DELIVERED);
@@ -122,7 +125,8 @@ class WorkflowEngine implements AugmentedObject
                 $orderId,
                 $context,
                 $this->classConfig['notification_address'],
-                [DocumentRenderer::DOC_TYPE_INVOICE]);
+                [DocumentRenderer::DOC_TYPE_INVOICE]
+            );
         }
     }
 

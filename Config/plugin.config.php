@@ -3,12 +3,14 @@
 namespace MxcVapee\Config;
 
 use MxcVapee\PluginListeners\StatusMailTemplateInstaller;
+use MxcVapee\PluginListeners\WorkflowMailTemplateInstaller;
 use MxcVapee\Workflow\WorkflowEngine;
 use Shopware\Bundle\AttributeBundle\Service\TypeMapping;
 
 return [
     'plugin_listeners'   => [
-        StatusMailTemplateInstaller::class,
+//        StatusMailTemplateInstaller::class,
+        WorkflowMailTemplateInstaller::class,
     ],
     'doctrine' => [
         'attributes' => [
