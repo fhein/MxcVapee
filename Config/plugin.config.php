@@ -3,14 +3,17 @@
 namespace MxcVapee\Config;
 
 use MxcVapee\PluginListeners\StatusMailTemplateInstaller;
-use MxcVapee\PluginListeners\WorkflowMailTemplateInstaller;
-use MxcVapee\Workflow\WorkflowEngine;
+use MxcVapee\WorkflowActions\CheckPaypalPayments;
+use MxcVapee\WorkflowActions\PromotePaidOrders;
+use MxcVapee\WorkflowActions\RemindPrepayments;
 use Shopware\Bundle\AttributeBundle\Service\TypeMapping;
 
 return [
     'plugin_listeners'   => [
+        CheckPaypalPayments::class,
+        PromotePaidOrders::class,
+        RemindPrepayments::class,
 //        StatusMailTemplateInstaller::class,
-        WorkflowMailTemplateInstaller::class,
     ],
     'doctrine' => [
         'attributes' => [
@@ -21,10 +24,4 @@ return [
             ],
         ],
     ],
-    'services' => [
-        'magicals' => [
-            WorkflowEngine::class,
-        ],
-    ],
-
 ];

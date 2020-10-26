@@ -3,7 +3,7 @@
 
 namespace MxcVapee\PluginListeners;
 
-use MxcCommons\Plugin\Mail\MailManager;
+use MxcCommons\Plugin\Mail\MailTemplateManager;
 use MxcCommons\Plugin\Service\ClassConfigAwareTrait;
 use MxcCommons\Plugin\Service\LoggerAwareTrait;
 use MxcCommons\ServiceManager\AugmentedObject;
@@ -20,7 +20,7 @@ class StatusMailTemplateInstaller implements AugmentedObject
 
     protected $originalTemplates = __DIR__ . '/../Config/SavedStatusMailTemplates.config.php';
 
-    public function __construct(MailManager $mailManager)
+    public function __construct(MailTemplateManager $mailManager)
     {
         $this->mailManager = $mailManager;
     }
