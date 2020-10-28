@@ -43,7 +43,7 @@ class CheckPaypalPayments extends WorkflowAction
 
         $orderId = $order['orderID'];
         $engine->setPaymentStatus($orderId, $reviewStatus);
-        $context = $this->getNotificationContext($this->notificationTemplate);
+        $context = $this->getNotificationContext($this->notificationTemplate, $order);
         $engine->sendNotificationMail($orderId, $context);
     }
 }

@@ -38,7 +38,7 @@ class RemindPrepayments extends WorkflowAction
             $orderId = $order['orderID'];
             $engine->setPaymentStatus($orderId, $statusId);
             $engine->sendStatusMail($orderId, $statusId);
-            $context = $this->getNotificationContext($this->notificationTemplate);
+            $context = $this->getNotificationContext($this->notificationTemplate, $order);
             $engine->sendNotificationMail($orderId, $context);
         }
     }
