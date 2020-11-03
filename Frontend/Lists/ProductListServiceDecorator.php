@@ -34,22 +34,7 @@ class ProductListServiceDecorator implements ListProductServiceInterface
 
         /** @var ListProduct $article */
         foreach ($articles as $article) {
-
-            $details = ArticleTool::getArticleActiveDetailsArray($article->getId());
-
-            $inStock = 0;
-            $releaseDate = null;
-            foreach ($details as $detail) {
-                // @todo: Dropshipper's Companion
-                $inStock += empty($detail['dc_ic_active']) ? $detail['instock'] : $detail['dc_ic_instock'];
-                $releaseDate = $detail['releasedate'];
-                if ($releaseDate !== null) {
-                    $releaseDate = strtotime($releaseDate);
-                    $releaseDate = date('d.m.Y', $releaseDate);
-                }
-            }
-            $article->addAttribute('mxc_in_stock', new Attribute(['in_stock' => $inStock]));
-            $article->addAttribute('mxc_releasedate', new Attribute(['releasedate' => $releaseDate]));
+            $this->decorateListProduct($article);
         }
 
         return $articles;
@@ -66,6 +51,26 @@ class ProductListServiceDecorator implements ListProductServiceInterface
      */
     public function get($number, ProductContextInterface $context)
     {
-        return $this->parent->get($number, $context);
+        $article = $this->parent->get($number, $context);
+        $this->decorateListProduct($article);
+
+        return $article;
+    }
+
+    protected function decorateListProduct(ListProduct $article)
+    {
+        $details = ArticleTool::getArticleActiveDetailsArray($article->getId());
+        $inStock = 0;
+        $releaseDate = null;
+        foreach ($details as $detail) {
+            $inStock += $detail['instock'];
+            $releaseDate = $detail['releasedate'];
+            if ($releaseDate !== null) {
+                $releaseDate = strtotime($releaseDate);
+                $releaseDate = date('d.m.Y', $releaseDate);
+            }
+        }
+        $article->addAttribute('mxc_in_stock', new Attribute(['in_stock' => $inStock]));
+        $article->addAttribute('mxc_releasedate', new Attribute(['releasedate' => $releaseDate]));
     }
 }
