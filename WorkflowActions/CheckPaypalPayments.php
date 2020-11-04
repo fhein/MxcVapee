@@ -27,9 +27,14 @@ class CheckPaypalPayments extends WorkflowAction
 
     public function run(EventInterface $e)
     {
-        $order = $e->getParam('order');
         /** @var WorkflowEngine $engine */
         $engine = $e->getTarget();
+        $orderId = $e->getParam('orderID');
+        $order = $engine->getOrder($orderId);
+
+        // if there is no order number the order was cancelled by the customer
+        if ($order['ordernumber'] == 0) return;
+
         $reviewStatus = Status::PAYMENT_STATE_REVIEW_NECESSARY;
         $paymentStatus = $order['cleared'];
         if ($paymentStatus == Status::PAYMENT_STATE_COMPLETELY_PAID) return;

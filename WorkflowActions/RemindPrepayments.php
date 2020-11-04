@@ -26,16 +26,16 @@ class RemindPrepayments extends WorkflowAction
 
     public function run(EventInterface $e)
     {
-        $order = $e->getParam('order');
-        if ($order['cleared'] != Status::PAYMENT_STATE_OPEN) return;
-
         /** @var WorkflowEngine $engine */
         $engine = $e->getTarget();
+        $orderId = $e->getParam('orderID');
+        $order = $engine->getOrder($orderId);
+
+        if ($order['cleared'] != Status::PAYMENT_STATE_OPEN) return;
 
         if (! $engine->isPrepayment($order)) return;
         if ($engine->getOrderAge($order)->days > 3) {
             $statusId = Status::PAYMENT_STATE_1ST_REMINDER;
-            $orderId = $order['orderID'];
             $engine->setPaymentStatus($orderId, $statusId);
             $engine->sendStatusMail($orderId, $statusId);
             $context = $this->getNotificationContext($this->notificationTemplate, $order);

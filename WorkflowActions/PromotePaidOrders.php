@@ -17,14 +17,14 @@ class PromotePaidOrders extends WorkflowAction
 
     public function run(EventInterface $e)
     {
-        $order = $e->getParam('order');
-        if ($order['cleared'] != Status::PAYMENT_STATE_COMPLETELY_PAID) return;
-
         /** @var WorkflowEngine $engine */
         $engine = $e->getTarget();
+        $orderId = $e->getParam('orderID');
+        $order = $engine->getOrder($orderId);
+
+        if ($order['cleared'] != Status::PAYMENT_STATE_COMPLETELY_PAID) return;
 
         $statusId = Status::ORDER_STATE_IN_PROCESS;
-        $orderId = $order['orderID'];
         $engine->setOrderStatus($orderId, $statusId);
         $engine->sendStatusMail($orderId, $statusId);
     }
