@@ -5,9 +5,6 @@ namespace MxcVapee\Subscribers;
 use Enlight\Event\SubscriberInterface;
 use Enlight_Event_EventArgs;
 use Enlight_Template_Manager;
-use Shopware\Bundle\CookieBundle\CookieCollection;
-use Shopware\Bundle\CookieBundle\Structs\CookieGroupStruct;
-use Shopware\Bundle\CookieBundle\Structs\CookieStruct;
 
 class TemplateRegistration implements SubscriberInterface
 {

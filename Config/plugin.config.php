@@ -2,7 +2,6 @@
 
 namespace MxcVapee\Config;
 
-use MxcVapee\PluginListeners\StatusMailTemplateInstaller;
 use MxcVapee\WorkflowActions\CheckPaypalPayments;
 use MxcVapee\WorkflowActions\PromotePaidOrders;
 use MxcVapee\WorkflowActions\RemindPrepayments;
