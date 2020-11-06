@@ -57,8 +57,9 @@ class ProductListServiceDecorator implements ListProductServiceInterface
         return $article;
     }
 
-    protected function decorateListProduct(ListProduct $article)
+    protected function decorateListProduct(?ListProduct $article)
     {
+        if ($article === null) return;
         $details = ArticleTool::getArticleActiveDetailsArray($article->getId());
         $inStock = 0;
         $releaseDate = null;
