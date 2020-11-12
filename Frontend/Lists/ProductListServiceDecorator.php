@@ -59,7 +59,9 @@ class ProductListServiceDecorator implements ListProductServiceInterface
 
     protected function decorateListProduct(?ListProduct $article)
     {
-        if ($article === null) return;
+        if ($article === null) {
+            return;
+        }
         $details = ArticleTool::getArticleActiveDetailsArray($article->getId());
         $inStock = 0;
         $releaseDate = null;
@@ -71,7 +73,7 @@ class ProductListServiceDecorator implements ListProductServiceInterface
                 $releaseDate = date('d.m.Y', $releaseDate);
             }
         }
-        $article->addAttribute('mxc_in_stock', new Attribute(['in_stock' => $inStock]));
+        $article->addAttribute('mxc_instock', new Attribute(['instock' => $inStock]));
         $article->addAttribute('mxc_releasedate', new Attribute(['releasedate' => $releaseDate]));
     }
 }
