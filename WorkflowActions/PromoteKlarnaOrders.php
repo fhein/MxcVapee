@@ -7,12 +7,12 @@ use MxcWorkflow\Workflow\WorkflowAction;
 use MxcWorkflow\Workflow\WorkflowEngine;
 use Shopware\Models\Order\Status;
 
-class PromotePaidOrders extends WorkflowAction
+class PromoteKlarnaOrders extends WorkflowAction
 {
     protected $config = [
         'statusId' => Status::ORDER_STATE_OPEN,
         'listener'    => __CLASS__,
-        'priority' => 1,
+        'priority' => 2,
     ];
 
     public function run(EventInterface $e)
@@ -22,13 +22,15 @@ class PromotePaidOrders extends WorkflowAction
         $orderId = $e->getParam('orderID');
         $order = $engine->getOrder($orderId);
 
-        // do not process Klarna orders (see PromoteKlarnaOrders)
-        if ($engine->isKlarna($order)) return;
-        // do only process orders which are paid
-        if ($order['cleared'] != Status::PAYMENT_STATE_COMPLETELY_PAID) return;
+        // if there is no order number the order was cancelled by the customer
+        if ($order['ordernumber'] == 0) return;
+
+        // process Klarna orders only
+        if (! $engine->isKlarna($order)) return;
 
         $statusId = Status::ORDER_STATE_IN_PROCESS;
         $engine->setOrderStatus($orderId, $statusId);
+        $engine->setPaymentStatus($orderId, Status::PAYMENT_STATE_PARTIALLY_INVOICED);
         $engine->sendStatusMail($orderId, $statusId);
     }
 }
