@@ -21,6 +21,7 @@ class PromoteKlarnaOrders extends WorkflowAction
         $engine = $e->getTarget();
         $orderId = $e->getParam('orderID');
         $order = $engine->getOrder($orderId);
+        if ($order['status'] != $this->config['statusId']) return;
 
         // if there is no order number the order was cancelled by the customer
         if ($order['ordernumber'] == 0) return;

@@ -21,6 +21,7 @@ class PromotePaidOrders extends WorkflowAction
         $engine = $e->getTarget();
         $orderId = $e->getParam('orderID');
         $order = $engine->getOrder($orderId);
+        if ($order['status'] != $this->config['statusId']) return;
 
         // do not process Klarna orders (see PromoteKlarnaOrders)
         if ($engine->isKlarna($order)) return;

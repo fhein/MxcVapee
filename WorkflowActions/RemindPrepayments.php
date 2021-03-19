@@ -30,7 +30,7 @@ class RemindPrepayments extends WorkflowAction
         $engine = $e->getTarget();
         $orderId = $e->getParam('orderID');
         $order = $engine->getOrder($orderId);
-
+        if ($order['status'] != $this->config['statusId']) return;
         if ($order['cleared'] != Status::PAYMENT_STATE_OPEN) return;
 
         if (! $engine->isPrepayment($order)) return;
